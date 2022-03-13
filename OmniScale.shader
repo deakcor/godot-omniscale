@@ -31,7 +31,7 @@ shader_type canvas_item;
 // SOFTWARE.
 // 
 
-uniform int ScaleMultiplier : hint_range(2, 12) = 4;
+uniform int ScaleMultiplier : hint_range(0, 100) = 4;
 uniform bool screen_space;
 
 // vertex compatibility #defines
@@ -44,19 +44,9 @@ uniform bool screen_space;
 //uniform sampler2D Texture;
 
 
-// We use the same colorspace as the HQx algorithms. (YUV?)
-vec3 rgb_to_hq_colospace(vec4 rgb)
-{
-    return vec3( 0.250 * rgb.r + 0.250 * rgb.g + 0.250 * rgb.b,
-                 0.250 * rgb.r - 0.000 * rgb.g - 0.250 * rgb.b,
-                -0.125 * rgb.r + 0.250 * rgb.g - 0.125 * rgb.b);
-}
-
-
 bool is_different(vec4 a, vec4 b)
 {
-    vec3 diff = abs(rgb_to_hq_colospace(a) - rgb_to_hq_colospace(b));
-    return diff.x > 0.125 || diff.y > 0.027 || diff.z > 0.031;
+    return distance(a,b)>0.1;
 }
 
 // This define could've made code a ton more readable if godot shaders supported it, but it doesn't.
@@ -110,20 +100,20 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
     if (is_different(w8, w4)) pattern |= 1 << 7;
 
     if ((((pattern & (191)) == (55)) || ((pattern & (219)) == (19))) && is_different(w1, w5))
-        return mix(w4, w3, 0.5 - p.x);
+        return mix(w4, w3, 0.5 - p.x>0.5?1.0:0.0);
     if ((((pattern & (219)) == (73)) || ((pattern & (239)) == (109))) && is_different(w7, w3))
-        return mix(w4, w1, 0.5 - p.y);
+        return mix(w4, w1, 0.5 - p.y>0.5?1.0:0.0);
     if ((((pattern & (11)) == (11)) || ((pattern & (254)) == (74)) || ((pattern & (254)) == (26))) && is_different(w3, w1))
         return w4;
     if ((((pattern & (111)) == (42)) || ((pattern & (91)) == (10)) || ((pattern & (191)) == (58)) || ((pattern & (223)) == (90)) ||
          ((pattern & (159)) == (138)) || ((pattern & (207)) == (138)) || ((pattern & (239)) == (78)) || ((pattern & (63)) == (14)) ||
          ((pattern & (251)) == (90)) || ((pattern & (187)) == (138)) || ((pattern & (127)) == (90)) || ((pattern & (175)) == (138)) ||
          ((pattern & (235)) == (138))) && is_different(w3, w1))
-        return mix(w4, mix(w4, w0, 0.5 - p.x), 0.5 - p.y);
+        return mix(w4, mix(w4, w0, 0.5 - p.x>0.5?1.0:0.0), 0.5 - p.y>0.5?1.0:0.0);
     if (((pattern & (11)) == (8)))
-        return mix(mix(w0 * 0.375 + w1 * 0.25 + w4 * 0.375, w4 * 0.5 + w1 * 0.5, p.x * 2.0), w4, p.y * 2.0);
+        return mix(mix(w0 * 0.375 + w1 * 0.25 + w4 * 0.375, w4 * 0.5 + w1 * 0.5, p.x * 2.0>0.5?1.0:0.0), w4, p.y * 2.0>0.5?1.0:0.0);
     if (((pattern & (11)) == (2)))
-        return mix(mix(w0 * 0.375 + w3 * 0.25 + w4 * 0.375, w4 * 0.5 + w3 * 0.5, p.y * 2.0), w4, p.x * 2.0);
+        return mix(mix(w0 * 0.375 + w3 * 0.25 + w4 * 0.375, w4 * 0.5 + w3 * 0.5, p.y * 2.0>0.5?1.0:0.0), w4, p.x * 2.0>0.5?1.0:0.0);
     if (((pattern & (47)) == (47))) {
         float dist = length(p - vec2(0.5));
         float pixel_size = length(1.0 / (OutputSize / textureDimensions));
@@ -132,16 +122,16 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
         }
         vec4 r;
         if (is_different(w0, w1) || is_different(w0, w3)) {
-            r = mix(w1, w3, p.y - p.x + 0.5);
+            r = mix(w1, w3, p.y - p.x + 0.5>0.5?1.0:0.0);
         }
         else {
-            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0), w1, p.x * 2.0);
+            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0>0.5?1.0:0.0), w1, p.x * 2.0>0.5?1.0:0.0);
         }
 
         if (dist > 0.5 + pixel_size / 2.0) {
             return r;
         }
-        return mix(w4, r, (dist - 0.5 + pixel_size / 2.0) / pixel_size);
+        return mix(w4, r, (dist - 0.5 + pixel_size / 2.0) / pixel_size>0.5?1.0:0.0);
     }
     if (((pattern & (191)) == (55)) || ((pattern & (219)) == (19))) {
         float dist = p.x - 2.0 * p.y;
@@ -149,11 +139,11 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
         if (dist > pixel_size / 2.0) {
             return w1;
         }
-        vec4 r = mix(w3, w4, p.x + 0.5);
+        vec4 r = mix(w3, w4, p.x + 0.5>0.5?1.0:0.0);
         if (dist < -pixel_size / 2.0) {
             return r;
         }
-        return mix(r, w1, (dist + pixel_size / 2.0) / pixel_size);
+        return mix(r, w1, (dist + pixel_size / 2.0) / pixel_size>0.5?1.0:0.0);
     }
     if (((pattern & (219)) == (73)) || ((pattern & (239)) == (109))) {
         float dist = p.y - 2.0 * p.x;
@@ -161,11 +151,11 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
         if (p.y - 2.0 * p.x > pixel_size / 2.0) {
             return w3;
         }
-        vec4 r = mix(w1, w4, p.x + 0.5);
+        vec4 r = mix(w1, w4, p.x + 0.5>0.5?1.0:0.0);
         if (dist < -pixel_size / 2.0) {
             return r;
         }
-        return mix(r, w3, (dist + pixel_size / 2.0) / pixel_size);
+        return mix(r, w3, (dist + pixel_size / 2.0) / pixel_size>0.5?1.0:0.0);
     }
     if (((pattern & (191)) == (143)) || ((pattern & (126)) == (14))) {
         float dist = p.x + 2.0 * p.y;
@@ -177,17 +167,17 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
 
         vec4 r;
         if (is_different(w0, w1) || is_different(w0, w3)) {
-            r = mix(w1, w3, p.y - p.x + 0.5);
+            r = mix(w1, w3, p.y - p.x + 0.5>0.5?1.0:0.0);
         }
         else {
-            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0), w1, p.x * 2.0);
+            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0>0.5?1.0:0.0), w1, p.x * 2.0>0.5?1.0:0.0);
         }
 
         if (dist < 1.0 - pixel_size / 2.0) {
             return r;
         }
 
-        return mix(r, w4, (dist + pixel_size / 2.0 - 1.0) / pixel_size);
+        return mix(r, w4, (dist + pixel_size / 2.0 - 1.0) / pixel_size>0.5?1.0:0.0);
 
     }
 
@@ -202,28 +192,28 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
         vec4 r;
 
         if (is_different(w0, w1) || is_different(w0, w3)) {
-            r = mix(w1, w3, p.y - p.x + 0.5);
+            r = mix(w1, w3, p.y - p.x + 0.5>0.5?1.0:0.0);
         }
         else {
-            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0), w1, p.x * 2.0);
+            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0>0.5?1.0:0.0), w1, p.x * 2.0>0.5?1.0:0.0);
         }
 
         if (dist < 1.0 - pixel_size / 2.0) {
             return r;
         }
 
-        return mix(r, w4, (dist + pixel_size / 2.0 - 1.0) / pixel_size);
+        return mix(r, w4, (dist + pixel_size / 2.0 - 1.0) / pixel_size>0.5?1.0:0.0);
     }
 
     if (((pattern & (27)) == (3)) || ((pattern & (79)) == (67)) || ((pattern & (139)) == (131)) || ((pattern & (107)) == (67)))
-        return mix(w4, w3, 0.5 - p.x);
+        return mix(w4, w3, 0.5 - p.x>0.5?1.0:0.0);
 
     if (((pattern & (75)) == (9)) || ((pattern & (139)) == (137)) || ((pattern & (31)) == (25)) || ((pattern & (59)) == (25)))
-        return mix(w4, w1, 0.5 - p.y);
+        return mix(w4, w1, 0.5 - p.y>0.5?1.0:0.0);
 
     if (((pattern & (251)) == (106)) || ((pattern & (111)) == (110)) || ((pattern & (63)) == (62)) || ((pattern & (251)) == (250)) ||
         ((pattern & (223)) == (222)) || ((pattern & (223)) == (30)))
-        return mix(w4, w0, (1.0 - p.x - p.y) / 2.0);
+        return mix(w4, w0, (1.0 - p.x - p.y) / 2.0>0.5?1.0:0.0);
 
     if (((pattern & (79)) == (75)) || ((pattern & (159)) == (27)) || ((pattern & (47)) == (11)) ||
         ((pattern & (190)) == (10)) || ((pattern & (238)) == (10)) || ((pattern & (126)) == (10)) || ((pattern & (235)) == (75)) ||
@@ -237,24 +227,24 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
 
         vec4 r;
         if (is_different(w0, w1) || is_different(w0, w3)) {
-            r = mix(w1, w3, p.y - p.x + 0.5);
+            r = mix(w1, w3, p.y - p.x + 0.5>0.5?1.0:0.0);
         }
         else {
-            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0), w1, p.x * 2.0);
+            r = mix(mix(w1 * 0.375 + w0 * 0.25 + w3 * 0.375, w3, p.y * 2.0>0.5?1.0:0.0), w1, p.x * 2.0>0.5?1.0:0.0);
         }
 
         if (dist < 0.5 - pixel_size / 2.0) {
             return r;
         }
 
-        return mix(r, w4, (dist + pixel_size / 2.0 - 0.5) / pixel_size);
+        return mix(r, w4, (dist + pixel_size / 2.0 - 0.5) / pixel_size>0.5?1.0:0.0);
     }
 
     if (((pattern & (11)) == (1)))
-        return mix(mix(w4, w3, 0.5 - p.x), mix(w1, (w1 + w3) / 2.0, 0.5 - p.x), 0.5 - p.y);
+        return mix(mix(w4, w3, 0.5 - p.x>0.5?1.0:0.0), mix(w1, (w1 + w3) / 2.0, 0.5 - p.x>0.5?1.0:0.0), 0.5 - p.y>0.5?1.0:0.0);
 
     if (((pattern & (11)) == (0)))
-        return mix(mix(w4, w3, 0.5 - p.x), mix(w1, w0, 0.5 - p.x), 0.5 - p.y);
+        return mix(mix(w4, w3, 0.5 - p.x>0.5?1.0:0.0), mix(w1, w0, 0.5 - p.x>0.5?1.0:0.0), 0.5 - p.y>0.5?1.0:0.0);
 
     float dist = p.x + p.y;
     float pixel_size = length(1.0 / (OutputSize / textureDimensions));
@@ -286,11 +276,11 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
     }
 
     if (diagonal_bias <=  0) {
-        vec4 r = mix(w1, w3, p.y - p.x + 0.5);
+        vec4 r = mix(w1, w3, p.y - p.x + 0.5>0.5?1.0:0.0);
         if (dist < 0.5 - pixel_size / 2.0) {
             return r;
         }
-        return mix(r, w4, (dist + pixel_size / 2.0 - 0.5) / pixel_size);
+        return mix(r, w4, (dist + pixel_size / 2.0 - 0.5) / pixel_size>0.5?1.0:0.0);
     }
     
     return w4;
@@ -299,9 +289,12 @@ vec4 scale(sampler2D image, vec2 coord, vec2 pxSize) {
 
 void fragment()
 {
+	vec4 c;
 	if (screen_space) {
-			COLOR = scale(SCREEN_TEXTURE, SCREEN_UV, SCREEN_PIXEL_SIZE);
+			c = scale(SCREEN_TEXTURE, SCREEN_UV, SCREEN_PIXEL_SIZE);
 		} else { 
-			COLOR = scale(TEXTURE, UV, TEXTURE_PIXEL_SIZE);
+			c = scale(TEXTURE, UV, TEXTURE_PIXEL_SIZE);
 		}
+	//c.a = step(0.5,c.a);
+	COLOR = c;
 } 
